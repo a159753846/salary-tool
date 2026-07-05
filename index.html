@@ -185,7 +185,7 @@ body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: va
         </div>
         <div class="setting-group">
           <label>最低業績門檻（0 = 全部顯示）</label>
-          <input type="number" id="min-amount" class="text-input" placeholder="例：100000" value="1" />
+          <input type="number" id="min-amount" class="text-input" placeholder="例：100000" value="200000" />
         </div>
       </div>
 
@@ -215,9 +215,10 @@ body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: va
           <div class="setting-group">
             <label>業績排序</label>
             <select id="sort-order" class="select-input">
+              <option value="title" selected>依位階排序（經理 > 襄理 > 主任 > 專員）</option>
+              <option value="desc">業績：由高到低</option>
+              <option value="asc">業績：由低到高</option>
               <option value="none">不排序（保留原順序）</option>
-              <option value="desc">由高到低</option>
-              <option value="asc">由低到高</option>
             </select>
           </div>
           <div class="setting-group">
@@ -463,6 +464,19 @@ generateBtn.addEventListener('click',()=>{
 
   if(sort==='desc') rows.sort((a,b)=>toNum(b[sCol])-toNum(a[sCol]));
   else if(sort==='asc') rows.sort((a,b)=>toNum(a[sCol])-toNum(b[sCol]));
+  else if(sort==='title') {
+    const rankMap = { '經理': 1, '襄理': 2, '主任': 3, '專員': 4 };
+    const getRank = (t) => {
+      for (const k in rankMap) { if (t.includes(k)) return rankMap[k]; }
+      return 99;
+    };
+    rows.sort((a,b) => {
+      const rA = getRank(tCol ? String(a[tCol] ?? '').trim() : '');
+      const rB = getRank(tCol ? String(b[tCol] ?? '').trim() : '');
+      if (rA !== rB) return rA - rB;
+      return toNum(b[sCol]) - toNum(a[sCol]);
+    });
+  }
 
   const lines=[]; if(title){lines.push(title);lines.push('');}
   let total=0;
