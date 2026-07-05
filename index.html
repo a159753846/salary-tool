@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>發薪業績整理工具</title>
+  <meta name="description" content="快速整理 Excel 發薪業績資料，輸出標準格式文字報表。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+/* ─── Reset & Root ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0b0e1a; --surface: rgba(255,255,255,0.04);
+  --border: rgba(255,255,255,0.09); --border-h: rgba(255,255,255,0.18);
+  --text: #e8eaf6; --sub: #8892a4;
+  --accent: #7c6ef7; --accent2: #38bdf8; --accent3: #34d399;
+  --radius: 16px; --shadow: 0 8px 32px rgba(0,0,0,0.45); --tr: 0.22s ease;
+}
+body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; position: relative; }
+
+/* ─── Orbs ─── */
+.bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.22; animation: orb-float 12s ease-in-out infinite; }
+.orb1 { width: 520px; height: 520px; background: #7c6ef7; top: -160px; left: -160px; }
+.orb2 { width: 420px; height: 420px; background: #38bdf8; bottom: -110px; right: -110px; animation-delay: -4s; }
+.orb3 { width: 300px; height: 300px; background: #34d399; top: 42%; left: 56%; animation-delay: -8s; }
+@keyframes orb-float { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-40px) scale(1.07); } }
+
+/* ─── Layout ─── */
+.container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; display: flex; flex-direction: column; gap: 28px; }
+
+/* ─── Header ─── */
+.header { display: flex; align-items: center; gap: 18px; }
+.header-icon { font-size: 2.6rem; line-height: 1; }
+.header h1 { font-size: 1.9rem; font-weight: 700; background: linear-gradient(120deg,#a78bfa,#38bdf8,#34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.subtitle { color: var(--sub); font-size: 0.9rem; margin-top: 4px; }
+
+/* ─── Card ─── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow); transition: border-color var(--tr); }
+.card:hover { border-color: var(--border-h); }
+.card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+.card-header h2 { font-size: 1.05rem; font-weight: 600; flex: 1; }
+.card-actions { display: flex; gap: 10px; margin-left: auto; }
+.step-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 50px; background: linear-gradient(135deg,var(--accent),var(--accent2)); font-size: 0.78rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+.row-count { color: var(--sub); font-size: 0.8rem; margin-left: auto; }
+
+/* ─── Drop Zone ─── */
+.drop-zone { border: 2px dashed rgba(124,110,247,0.4); border-radius: 12px; padding: 52px 24px; text-align: center; cursor: pointer; transition: all var(--tr); }
+.drop-zone:hover, .drop-zone.dragging { border-color: var(--accent); background: rgba(124,110,247,0.07); }
+.drop-icon { font-size: 2.4rem; margin-bottom: 10px; }
+.drop-title { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+.drop-sub { color: var(--sub); font-size: 0.82rem; margin-bottom: 22px; }
+.file-info { margin-top: 14px; display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--accent3); }
+.file-badge { font-weight: 600; }
+
+/* ─── Settings ─── */
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(230px,1fr)); gap: 16px; margin-bottom: 22px; }
+.setting-group { display: flex; flex-direction: column; gap: 7px; }
+.setting-group label { font-size: 0.78rem; color: var(--sub); font-weight: 500; letter-spacing: 0.03em; }
+.select-input, .text-input { background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: inherit; font-size: 0.88rem; padding: 9px 12px; outline: none; transition: border-color var(--tr),background var(--tr); appearance: none; -webkit-appearance: none; }
+.select-input { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238892a4' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+.select-input:focus, .text-input:focus { border-color: var(--accent); background: rgba(124,110,247,0.1); }
+.select-input option, select option { background-color: #1a1d2e; color: #e8eaf6; }
+.filter-section, .sort-section { border-top: 1px solid var(--border); padding-top: 18px; margin-bottom: 20px; }
+.filter-section h3, .sort-section h3 { font-size: 0.82rem; color: var(--sub); margin-bottom: 14px; font-weight: 500; }
+.filter-row { display: grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); gap: 16px; }
+
+/* ─── Buttons ─── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: none; border-radius: 9px; cursor: pointer; font-family: inherit; font-size: 0.88rem; font-weight: 600; padding: 10px 20px; transition: all var(--tr); user-select: none; }
+.btn-primary { background: linear-gradient(135deg,#7c6ef7,#38bdf8); color: #fff; box-shadow: 0 4px 18px rgba(124,110,247,0.35); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 26px rgba(124,110,247,0.5); }
+.btn-primary:active { transform: translateY(0); }
+.btn-outline { background: transparent; border: 1px solid var(--border-h); color: var(--text); }
+.btn-outline:hover { background: rgba(255,255,255,0.07); border-color: var(--accent); color: #a78bfa; }
+.btn.wide { width: 100%; padding: 14px; font-size: 0.95rem; }
+
+/* ─── Header Preview ─── */
+.header-preview { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.8rem; color: var(--sub); }
+.header-preview strong { color: var(--accent2); }
+.header-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.header-tag { background: rgba(124,110,247,0.12); border: 1px solid rgba(124,110,247,0.25); border-radius: 20px; padding: 3px 10px; font-size: 0.75rem; color: #a78bfa; }
+
+/* ─── Output ─── */
+.summary-bar { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2); border-radius: 9px; padding: 10px 16px; font-size: 0.82rem; color: var(--accent3); margin-bottom: 16px; display: flex; gap: 20px; flex-wrap: wrap; }
+.output-text { width: 100%; min-height: 320px; background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 10px; color: #e8eaf6; font-family: 'Noto Sans TC', monospace; font-size: 0.9rem; line-height: 1.85; padding: 18px 20px; resize: vertical; outline: none; transition: border-color var(--tr); letter-spacing: 0.02em; }
+.output-text:focus { border-color: var(--accent); }
+
+/* ─── Toast ─── */
+.toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.4); color: var(--accent3); border-radius: 50px; padding: 10px 26px; font-size: 0.88rem; font-weight: 600; backdrop-filter: blur(8px); z-index: 1000; animation: toast-in 0.3s ease forwards; }
+.toast.fade-out { animation: toast-out 0.3s ease forwards; }
+@keyframes toast-in  { from { opacity:0; transform: translateX(-50%) translateY(12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+@keyframes toast-out { from { opacity:1; } to { opacity:0; transform: translateX(-50%) translateY(8px); } }
+
+/* ─── Table ─── */
+.table-wrapper { overflow-x: auto; border-radius: 10px; }
+.table-wrapper table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.table-wrapper th { background: rgba(124,110,247,0.15); color: #a78bfa; padding: 9px 12px; text-align: left; font-weight: 600; white-space: nowrap; border-bottom: 1px solid rgba(124,110,247,0.25); }
+.table-wrapper td { padding: 7px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); white-space: nowrap; color: #d0d8e8; font-size: 0.82rem; }
+.table-wrapper tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+.table-wrapper tr:hover td { background: rgba(124,110,247,0.08); color: #fff; }
+
+/* ─── Diagnostic ─── */
+.diag-box { background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 14px; font-size: 0.82rem; color: #fde68a; }
+.diag-box strong { display: block; margin-bottom: 10px; font-size: 0.85rem; }
+.diag-samples { display: flex; flex-direction: column; gap: 4px; }
+.diag-row { display: flex; gap: 12px; align-items: center; padding: 4px 8px; border-radius: 6px; background: rgba(0,0,0,0.2); }
+.diag-row .diag-name { color: #e8eaf6; min-width: 100px; }
+.diag-row .diag-raw  { color: var(--sub); font-size: 0.75rem; flex: 1; }
+.diag-row .diag-num  { color: #34d399; font-weight: 600; min-width: 80px; text-align: right; }
+.diag-row .diag-zero { color: #f87171; }
+
+/* ─── Utility ─── */
+.hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
+  </div>
+
+  <div class="container">
+
+    <header class="header">
+      <div class="header-icon">📊</div>
+      <div>
+        <h1>發薪業績整理工具</h1>
+        <p class="subtitle">上傳 Excel 檔案，一鍵輸出標準業績報表</p>
+      </div>
+    </header>
+
+    <!-- Step 1: Upload -->
+    <section class="card" id="upload-section">
+      <div class="card-header">
+        <span class="step-badge">1</span>
+        <h2>上傳 Excel 檔案</h2>
+      </div>
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">📂</div>
+        <p class="drop-title">拖放 Excel 檔案至此</p>
+        <p class="drop-sub">或點擊選擇檔案（支援 .xlsx、.xls、.csv）</p>
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden />
+        <button class="btn btn-primary" id="choose-file-btn">選擇檔案</button>
+      </div>
+      <div class="file-info hidden" id="file-info">
+        <span class="file-badge">✅ 已載入：</span>
+        <span id="file-name-display"></span>
+      </div>
+    </section>
+
+    <!-- Step 2: Settings -->
+    <section class="card hidden" id="settings-section">
+      <div class="card-header">
+        <span class="step-badge">2</span>
+        <h2>欄位設定</h2>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting-group">
+          <label>工作表（Sheet）</label>
+          <select id="sheet-select" class="select-input"></select>
+        </div>
+        <div class="setting-group">
+          <label>標題列（從第幾列開始？）</label>
+          <select id="header-row-select" class="select-input"></select>
+        </div>
+        <div class="setting-group">
+          <label>員工姓名欄位</label>
+          <select id="col-name" class="select-input"></select>
+        </div>
+        <div class="setting-group">
+          <label>職位名稱欄位</label>
+          <select id="col-title" class="select-input"></select>
+        </div>
+        <div class="setting-group">
+          <label>發薪業績欄位</label>
+          <select id="col-salary" class="select-input"></select>
+        </div>
+        <div class="setting-group">
+          <label>報表標題（選填）</label>
+          <input type="text" id="report-title" class="text-input" placeholder="例：115/5月 發薪業績" />
+        </div>
+        <div class="setting-group">
+          <label>最低業績門檻（0 = 全部顯示）</label>
+          <input type="number" id="min-amount" class="text-input" placeholder="例：100000" value="1" />
+        </div>
+      </div>
+
+      <div class="diag-box hidden" id="diag-box">
+        <strong>🔍 業績欄位診斷：</strong>
+        <div id="diag-content"></div>
+      </div>
+      <button class="btn btn-outline" id="diag-btn" style="margin-bottom:16px; width:100%;">🔍 先診斷：預覽業績欄位的數值</button>
+
+      <div class="filter-section">
+        <h3>篩選條件（選填）</h3>
+        <div class="filter-row">
+          <div class="setting-group">
+            <label>篩選欄位</label>
+            <select id="filter-col" class="select-input"><option value="">（不篩選）</option></select>
+          </div>
+          <div class="setting-group">
+            <label>包含關鍵字</label>
+            <input type="text" id="filter-value" class="text-input" placeholder="例：明揚區" />
+          </div>
+        </div>
+      </div>
+
+      <div class="sort-section">
+        <h3>排序設定（選填）</h3>
+        <div class="filter-row">
+          <div class="setting-group">
+            <label>業績排序</label>
+            <select id="sort-order" class="select-input">
+              <option value="none">不排序（保留原順序）</option>
+              <option value="desc">由高到低</option>
+              <option value="asc">由低到高</option>
+            </select>
+          </div>
+          <div class="setting-group">
+            <label>金額格式</label>
+            <select id="amount-format" class="select-input">
+              <option value="plain">純數字（889000）</option>
+              <option value="comma">千分位（889,000）</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary wide" id="generate-btn">⚡ 產生報表</button>
+    </section>
+
+    <!-- Step 3: Output -->
+    <section class="card hidden" id="output-section">
+      <div class="card-header">
+        <span class="step-badge">3</span>
+        <h2>整理結果</h2>
+        <div class="card-actions">
+          <button class="btn btn-outline" id="copy-btn">📋 複製</button>
+          <button class="btn btn-outline" id="download-txt-btn">⬇️ 下載 .txt</button>
+        </div>
+      </div>
+      <div class="summary-bar" id="summary-bar"></div>
+      <div class="output-wrapper">
+        <textarea id="output-text" class="output-text" readonly spellcheck="false"></textarea>
+      </div>
+      <div class="toast hidden" id="toast">✅ 已複製到剪貼簿！</div>
+    </section>
+
+    <!-- Table Preview -->
+    <section class="card hidden" id="preview-section">
+      <div class="card-header">
+        <span class="step-badge">📋</span>
+        <h2>原始資料預覽</h2>
+        <span class="row-count" id="row-count-label"></span>
+      </div>
+      <div class="table-wrapper" id="table-wrapper"></div>
+    </section>
+
+  </div>
+
+  <script>
+/* ── State ── */
+let workbook=null, rawRows=[], headers=[];
+
+/* ── DOM ── */
+const dropZone        = document.getElementById('drop-zone');
+const fileInput       = document.getElementById('file-input');
+const chooseFileBtn   = document.getElementById('choose-file-btn');
+const fileInfo        = document.getElementById('file-info');
+const fileNameDisplay = document.getElementById('file-name-display');
+const settingsSection = document.getElementById('settings-section');
+const sheetSelect     = document.getElementById('sheet-select');
+const headerRowSelect = document.getElementById('header-row-select');
+const colName         = document.getElementById('col-name');
+const colTitle        = document.getElementById('col-title');
+const colSalary       = document.getElementById('col-salary');
+const reportTitleInput= document.getElementById('report-title');
+const filterCol       = document.getElementById('filter-col');
+const filterValue     = document.getElementById('filter-value');
+const sortOrder       = document.getElementById('sort-order');
+const amountFormat    = document.getElementById('amount-format');
+const generateBtn     = document.getElementById('generate-btn');
+const outputSection   = document.getElementById('output-section');
+const outputText      = document.getElementById('output-text');
+const copyBtn         = document.getElementById('copy-btn');
+const downloadTxtBtn  = document.getElementById('download-txt-btn');
+const summaryBar      = document.getElementById('summary-bar');
+const toast           = document.getElementById('toast');
+const diagBtn         = document.getElementById('diag-btn');
+const diagBox         = document.getElementById('diag-box');
+const diagContent     = document.getElementById('diag-content');
+const minAmountInput  = document.getElementById('min-amount');
+const previewSection  = document.getElementById('preview-section');
+const tableWrapper    = document.getElementById('table-wrapper');
+const rowCountLabel   = document.getElementById('row-count-label');
+
+/* ── Upload ── */
+chooseFileBtn.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('click', (e) => { if(e.target!==chooseFileBtn) fileInput.click(); });
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+dropZone.addEventListener('dragover',  (e) => { e.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropZone.classList.remove('dragging');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(!['xlsx','xls','csv'].includes(ext)){ alert('請上傳 .xlsx、.xls 或 .csv'); return; }
+  fileNameDisplay.textContent = file.name;
+  fileInfo.classList.remove('hidden');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    workbook = XLSX.read(e.target.result, { type:'array', cellText:false, cellDates:true });
+    populateSheets();
+    settingsSection.classList.remove('hidden');
+    settingsSection.scrollIntoView({ behavior:'smooth', block:'start' });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ── Sheets ── */
+function populateSheets() {
+  sheetSelect.innerHTML = '';
+  workbook.SheetNames.forEach((name,i) => {
+    const opt = document.createElement('option');
+    opt.value=i; opt.textContent=name; sheetSelect.appendChild(opt);
+  });
+  autoDetectHeaderRow();
+  loadSheet();
+}
+sheetSelect.addEventListener('change', () => { autoDetectHeaderRow(); loadSheet(); });
+headerRowSelect.addEventListener('change', loadSheet);
+
+function autoDetectHeaderRow() {
+  const ws  = workbook.Sheets[workbook.SheetNames[+sheetSelect.value]];
+  const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', blankrows:true });
+  const kw  = ['姓名','職位','業績','金額','員工','名稱','代碼','日期','區處'];
+  let bestRow=0, bestScore=0;
+  for(let i=0; i<Math.min(raw.length,15); i++){
+    const cells = raw[i].filter(c => c!==''&&c!=null);
+    if(cells.length<3) continue;
+    let score = cells.length;
+    cells.forEach(c => { if(kw.some(k=>String(c).includes(k))) score+=5; });
+    if(score>bestScore){ bestScore=score; bestRow=i; }
+  }
+  headerRowSelect.innerHTML='';
+  for(let i=0; i<Math.min(raw.length-1,15); i++){
+    const opt=document.createElement('option'); opt.value=i;
+    const pre=raw[i].filter(c=>c!=='').slice(0,3).join('、');
+    opt.textContent=`第 ${i+1} 列${pre?'（'+pre+'…）':''}${i===bestRow?' ✅ 自動偵測':''}`;
+    headerRowSelect.appendChild(opt);
+  }
+  headerRowSelect.value=bestRow;
+}
+
+function loadSheet() {
+  if(!workbook) return;
+  const ws        = workbook.Sheets[workbook.SheetNames[+sheetSelect.value]];
+  const headerRow = +headerRowSelect.value;
+  const data      = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', blankrows:true });
+  if(data.length<=headerRow){ rawRows=[]; headers=[]; return; }
+
+  const rawH = data[headerRow].map(h=>String(h).trim());
+  const hIdx = [];
+  headers = [];
+  rawH.forEach((h,i) => { if(h!==''){headers.push(h); hIdx.push(i);} });
+
+  rawRows = data.slice(headerRow+1).map(row => {
+    const obj={};
+    headers.forEach((h,i) => { obj[h] = row[hIdx[i]]!==undefined ? row[hIdx[i]] : ''; });
+    return obj;
+  });
+  populateColumnSelects();
+  renderHeaderPreview();
+  renderPreviewTable();
+}
+
+/* ── Column selects ── */
+function populateColumnSelects(){
+  [colName,colTitle,colSalary,filterCol].forEach(s=>s.innerHTML='');
+  filterCol.appendChild(Object.assign(document.createElement('option'),{value:'',textContent:'（不篩選）'}));
+  colTitle.appendChild(Object.assign(document.createElement('option'),{value:'',textContent:'（不加職稱）'}));
+  headers.forEach(h => {
+    [colName,colTitle,colSalary,filterCol].forEach(s => {
+      s.appendChild(Object.assign(document.createElement('option'),{value:h,textContent:h}));
+    });
+  });
+  autoDetect(colName,  ['員工姓名','姓名','名稱']);
+  autoDetect(colTitle, ['職位名稱','職稱','職位','位階']);
+  autoDetect(colSalary,['發薪業績','業績','金額','發薪']);
+}
+function autoDetect(sel,kws){
+  for(const kw of kws){ const m=headers.find(h=>h.includes(kw)); if(m){sel.value=m;return;} }
+}
+
+/* ── Header preview ── */
+function renderHeaderPreview(){
+  document.getElementById('header-preview-box')?.remove();
+  const box = document.createElement('div');
+  box.id='header-preview-box'; box.className='header-preview';
+  box.innerHTML=`<strong>已偵測到 ${headers.length} 個欄位：</strong><div class="header-tags">${headers.map(h=>`<span class="header-tag">${esc(h)}</span>`).join('')}</div>`;
+  settingsSection.insertBefore(box, settingsSection.querySelector('.settings-grid'));
+}
+
+/* ── Preview Table ── */
+function renderPreviewTable(){
+  previewSection.classList.remove('hidden');
+  rowCountLabel.textContent=`共 ${rawRows.length} 筆`;
+  const shown=rawRows.slice(0,50);
+  let html='<table><thead><tr>'+headers.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr></thead><tbody>';
+  shown.forEach(row=>{
+    html+='<tr>'+headers.map(h=>`<td>${esc(String(row[h]??''))}</td>`).join('')+'</tr>';
+  });
+  if(rawRows.length>50) html+=`<tr><td colspan="${headers.length}" style="text-align:center;color:var(--sub);padding:12px">…共 ${rawRows.length} 筆，僅顯示前 50 筆…</td></tr>`;
+  tableWrapper.innerHTML=html+'</tbody></table>';
+}
+
+/* ── Diagnostic ── */
+diagBtn.addEventListener('click',()=>{
+  const nCol=colName.value, sCol=colSalary.value;
+  if(!sCol){alert('請先選擇業績欄位');return;}
+  const samples=rawRows.filter(r=>String(r[nCol]??'').trim()!=='').slice(0,15);
+  if(samples.length===0){
+    diagContent.innerHTML='<span style="color:#f87171">找不到有姓名的資料列，請調整「標題列」設定。</span>';
+    diagBox.classList.remove('hidden'); return;
+  }
+  let html='<div class="diag-samples">', nonZero=0;
+  samples.forEach(row=>{
+    const name=String(row[nCol]??'').trim(), raw=row[sCol], num=toNum(raw);
+    if(num>0) nonZero++;
+    html+=`<div class="diag-row"><span class="diag-name">${esc(name)}</span><span class="diag-raw">原始值: "${esc(String(raw))}" (${typeof raw})</span><span class="${num>0?'diag-num':'diag-num diag-zero'}">${num>0?num.toLocaleString():'❌ 0'}</span></div>`;
+  });
+  html+=`</div><div style="margin-top:10px;color:var(--accent3)">✅ 前 ${samples.length} 筆中，共 <strong>${nonZero}</strong> 筆業績 &gt; 0</div>`;
+  if(nonZero===0) html+=`<div style="margin-top:8px;color:#f87171">⚠️ 所有業績都是 0！<br>1. 確認「發薪業績」欄位選擇正確<br>2. 調整「標題列」設定<br>3. 將「最低業績門檻」改為 0</div>`;
+  diagContent.innerHTML=html; diagBox.classList.remove('hidden');
+});
+
+/* ── Generate ── */
+generateBtn.addEventListener('click',()=>{
+  const nCol=colName.value, tCol=colTitle.value, sCol=colSalary.value;
+  const title=reportTitleInput.value.trim(), fCol=filterCol.value, fVal=filterValue.value.trim();
+  const sort=sortOrder.value, fmt=amountFormat.value;
+  const minAmt=Number(minAmountInput?.value??1)||0;
+  if(!nCol||!sCol){alert('請選擇「員工姓名」和「發薪業績」欄位');return;}
+
+  let rows=rawRows.filter(row=>{
+    if(headers.map(h=>String(row[h]??'').trim()).every(v=>v==='')) return false;
+    if(fCol&&fVal) return String(row[fCol]??'').includes(fVal);
+    return true;
+  }).filter(row=>String(row[nCol]??'').trim()!=='')
+    .filter(row=>toNum(row[sCol])>=minAmt);
+
+  if(rows.length===0){
+    alert(`⚠️ 找不到符合條件的資料！\n\n目前選擇：\n- 姓名欄：${nCol}\n- 業績欄：${sCol}\n- 最低門檻：${minAmt}\n\n請先點「🔍 先診斷」確認數值是否正常。`);
+    return;
+  }
+
+  if(sort==='desc') rows.sort((a,b)=>toNum(b[sCol])-toNum(a[sCol]));
+  else if(sort==='asc') rows.sort((a,b)=>toNum(a[sCol])-toNum(b[sCol]));
+
+  const lines=[]; if(title){lines.push(title);lines.push('');}
+  let total=0;
+  rows.forEach(row=>{
+    const name=String(row[nCol]??'').trim();
+    const jt=tCol?String(row[tCol]??'').trim():'';
+    const amt=toNum(row[sCol]); total+=amt;
+    const amtStr=fmt==='comma'?amt.toLocaleString('zh-TW'):String(amt);
+    lines.push(`${(tCol&&jt)?name+jt:name} ${amtStr}`);
+  });
+  outputText.value=lines.join('\n');
+  summaryBar.innerHTML=`<span>✅ 共 <strong>${rows.length}</strong> 人</span><span>業績總計：<strong>${total.toLocaleString('zh-TW')}</strong></span><span>平均業績：<strong>${Math.round(total/rows.length).toLocaleString('zh-TW')}</strong></span>`;
+  outputSection.classList.remove('hidden');
+  outputSection.scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+/* ── Copy ── */
+copyBtn.addEventListener('click', async()=>{
+  try{ await navigator.clipboard.writeText(outputText.value); showToast(); }
+  catch{ outputText.select(); document.execCommand('copy'); showToast(); }
+});
+function showToast(){
+  toast.classList.remove('hidden','fade-out');
+  setTimeout(()=>{ toast.classList.add('fade-out'); setTimeout(()=>toast.classList.add('hidden'),350); },2000);
+}
+
+/* ── Download ── */
+downloadTxtBtn.addEventListener('click',()=>{
+  const b=new Blob(['\uFEFF'+outputText.value],{type:'text/plain;charset=utf-8'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(b),download:'發薪業績報表.txt'});
+  a.click(); URL.revokeObjectURL(a.href);
+});
+
+/* ── Helpers ── */
+function toNum(v){
+  if(typeof v==='number') return isNaN(v)?0:Math.round(v);
+  const n=Number(String(v??'').replace(/,/g,'').replace(/\s/g,'').trim());
+  return isNaN(n)?0:Math.round(n);
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  </script>
+</body>
+</html>
